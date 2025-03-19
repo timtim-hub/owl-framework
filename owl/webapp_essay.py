@@ -194,4 +194,6 @@ def create_interface():
 if __name__ == "__main__":
     # Create and launch the interface
     interface = create_interface()
+    # Enable queue (required for progress tracking)
+    interface.queue()
     interface.launch(share=False, inbrowser=True) 
