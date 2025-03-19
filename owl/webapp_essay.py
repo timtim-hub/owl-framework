@@ -34,7 +34,7 @@ load_dotenv(dotenv_path=str(env_path))
 essays_dir = base_dir / "essays"
 essays_dir.mkdir(exist_ok=True)
 
-def generate_essay(api_key, topic, pages, instructions, update_progress=None):
+def generate_essay(api_key, topic, pages, instructions, progress=None):
     """Generate a scientific essay using the OWL framework.
     
     Args:
@@ -42,7 +42,7 @@ def generate_essay(api_key, topic, pages, instructions, update_progress=None):
         topic (str): Topic for the scientific essay
         pages (int): Number of pages to generate
         instructions (str): Additional instructions for the essay
-        update_progress (callable, optional): Function to update progress
+        progress (gr.Progress, optional): Progress component
         
     Returns:
         tuple: (essay content, output filename, token count)
@@ -50,8 +50,9 @@ def generate_essay(api_key, topic, pages, instructions, update_progress=None):
     # Set the API key in environment
     os.environ["OPENAI_API_KEY"] = api_key
     
-    if update_progress:
-        update_progress("Setting up agent society...", 0.1)
+    # Progress stages
+    if progress:
+        progress(0.1, desc="Setting up agent society...")
     
     # Construct the society
     society = construct_scientific_essay_society(
@@ -60,14 +61,14 @@ def generate_essay(api_key, topic, pages, instructions, update_progress=None):
         instructions=instructions
     )
     
-    if update_progress:
-        update_progress("Researching and generating essay...", 0.2)
+    if progress:
+        progress(0.2, desc="Researching and generating essay...")
     
     # Generate the essay
     answer, chat_history, token_count = run_society(society)
     
-    if update_progress:
-        update_progress("Finalizing essay...", 0.9)
+    if progress:
+        progress(0.9, desc="Finalizing essay...")
     
     # Generate output filename
     safe_topic = "".join(c if c.isalnum() else "_" for c in topic)
@@ -79,17 +80,10 @@ def generate_essay(api_key, topic, pages, instructions, update_progress=None):
     with open(full_path, "w") as f:
         f.write(answer)
     
-    if update_progress:
-        update_progress("Essay completed!", 1.0)
+    if progress:
+        progress(1.0, desc="Essay completed!")
     
     return answer, str(full_path), token_count
-
-def update_ui_progress(progress_bar, status_text):
-    def update(message, progress):
-        status_text.update(value=message)
-        progress_bar.update(value=progress)
-        return message, progress
-    return update
 
 # Gradio interface
 def create_interface():
@@ -140,8 +134,6 @@ def create_interface():
             generate_button = gr.Button("Generate Essay", variant="primary")
             cancel_button = gr.Button("Cancel", variant="stop")
         
-        # Fix for gradio 3.50.2
-        progress_bar = gr.Progress()
         status_text = gr.Markdown("Ready to generate essay")
         
         with gr.Tabs():
@@ -151,18 +143,20 @@ def create_interface():
                 file_path = gr.Textbox(label="Saved to", interactive=False)
                 token_count = gr.Number(label="Tokens Used", interactive=False)
         
-        def on_generate(api_key, topic, pages, instructions):
+        def on_generate(api_key, topic, pages, instructions, progress=gr.Progress()):
             if not api_key:
                 return "Please enter your OpenAI API key", "", 0
             if not topic:
                 return "Please enter a topic for your essay", "", 0
-                
-            updater = update_ui_progress(progress_bar, status_text)
+            
+            status_text.update("Generating essay...")
             
             try:
-                essay, path, tokens = generate_essay(api_key, topic, pages, instructions, updater)
+                essay, path, tokens = generate_essay(api_key, topic, pages, instructions, progress)
+                status_text.update("Essay generation completed!")
                 return essay, path, tokens
             except Exception as e:
+                status_text.update(f"Error: {str(e)}")
                 return f"Error: {str(e)}", "", 0
         
         generate_button.click(
@@ -172,12 +166,13 @@ def create_interface():
         )
         
         def on_cancel():
-            return "Generation canceled", "Stopped", 0
+            status_text.update("Generation canceled")
+            return "Generation canceled", "", 0
             
         cancel_button.click(
             fn=on_cancel,
             inputs=[],
-            outputs=[status_text, essay_output, token_count]
+            outputs=[essay_output, file_path, token_count]
         )
         
         gr.Markdown(
