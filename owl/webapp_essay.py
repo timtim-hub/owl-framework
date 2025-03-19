@@ -140,7 +140,8 @@ def create_interface():
             generate_button = gr.Button("Generate Essay", variant="primary")
             cancel_button = gr.Button("Cancel", variant="stop")
         
-        progress_bar = gr.Progress(label="Generation Progress", show_label=True)
+        # Fix for gradio 3.50.2
+        progress_bar = gr.Progress()
         status_text = gr.Markdown("Ready to generate essay")
         
         with gr.Tabs():
